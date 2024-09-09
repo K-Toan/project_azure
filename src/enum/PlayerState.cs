@@ -5,6 +5,7 @@ public enum PlayerState
     Walk,
     Run,
     Dash,
+    DashEnd,
     Attack,
     Injury,
     Die

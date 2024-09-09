@@ -9,7 +9,9 @@ public partial class Player : CharacterBody2D, IDamageable
 
     [Export]
     public float Acceleration { get; set; } = 18f;
+    public float Deceleration { get; set; } = 10f;
 
+    private bool _canMove = true;
     private float _currentSpeed = 0f;
     private Vector2 _moveVelocity;
     private Vector2 _moveDirection;
@@ -17,16 +19,17 @@ public partial class Player : CharacterBody2D, IDamageable
 
     // dash
     [Export]
-    public float DashSpeed { get; set; } = 720f;
+    public float DashSpeed { get; set; } = 540f;
 
     [Export]
-    public float DashDuration { get; set; } = 0.2f;
+    public float DashDuration { get; set; } = 0.16f;
 
     [Export]
-    public float DashCooldown { get; set; } = 1f;
+    public float DashCooldown { get; set; } = 0.64f;
 
     private bool _canDash = true;
     private float _dashTimer = 0f;
+    private float _dashEndTimer = 0f;
     private float _dashCooldownTimer = 0f;
     private Vector2 _dashDirection;
 
@@ -53,9 +56,9 @@ public partial class Player : CharacterBody2D, IDamageable
     public override void _Process(double delta)
     {
         GetInput();
+        HandleMove(delta);
         //HandleAttack();
         HandleDash(delta);
-        HandleMove(delta);
         HandleAnimation();
     }
 
@@ -103,17 +106,24 @@ public partial class Player : CharacterBody2D, IDamageable
             return;
         }
 
-        _playerStateHandler.SetPlayerState(PlayerState.Dash);
         _canDash = false;
         _dashTimer = DashDuration;
         _dashCooldownTimer = DashCooldown;
         _dashDirection = _lastMoveDirection;
+
+        // set dash velocity
+        _playerStateHandler.SetPlayerState(PlayerState.Dash);
     }
 
     private void HandleMove(double delta)
     {
-        if (_playerStateHandler.GetCurrentState() == PlayerState.Dash || _playerStateHandler.GetCurrentState() == PlayerState.Attack)
+        if (_playerStateHandler.GetCurrentState() == PlayerState.Dash ||
+            _playerStateHandler.GetCurrentState() == PlayerState.DashEnd ||
+            _playerStateHandler.GetCurrentState() == PlayerState.Attack)
+        {
+            _moveVelocity = Vector2.Zero;
             return;
+        }
 
         // lerp move velocity
         _moveVelocity = _moveVelocity.Lerp(_moveDirection * MoveSpeed, Acceleration * (float)delta);
@@ -138,18 +148,24 @@ public partial class Player : CharacterBody2D, IDamageable
 
     private void HandleDash(double delta)
     {
+        // dashing
         if (_playerStateHandler.GetCurrentState() == PlayerState.Dash)
         {
-            // perform dash 
-            if (_dashTimer > 0)
+            _dashTimer -= (float)delta;
+            Velocity = _dashDirection * DashSpeed;
+
+            if (_dashTimer <= 0)
             {
-                _dashTimer -= (float)delta;
-                Velocity = _dashDirection * DashSpeed;
+                _playerStateHandler.SetPlayerState(PlayerState.DashEnd);
             }
-            // reset dash
-            else
+        }
+        
+        // end dash
+        if (_playerStateHandler.GetCurrentState() == PlayerState.DashEnd)
+        {
+            Velocity = Velocity.Lerp(Vector2.Zero, Deceleration * (float)delta);
+            if(Velocity.Length() < 0.5f)
             {
-                Velocity = Vector2.Zero;
                 _playerStateHandler.SetPlayerState(PlayerState.Idle);
             }
         }
@@ -196,6 +212,12 @@ public partial class Player : CharacterBody2D, IDamageable
                 x = _dashDirection.X;
                 y = _dashDirection.Y;
                 animation = "dash";
+                break;
+
+            case PlayerState.DashEnd:
+                x = _dashDirection.X;
+                y = _dashDirection.Y;
+                animation = "dash_end";
                 break;
 
             case PlayerState.Attack:
